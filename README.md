@@ -24,7 +24,6 @@ Part of the **HimalayaQuant** backtest engine, this library has **no runtime dep
     - [Getters](#getters)
 - [Position Sizing](#position-sizing)
 - [Design Decisions](#design-decisions)
-- [Module Structure](#module-structure)
 
 ---
 
@@ -387,7 +386,6 @@ Stats are recalculated from scratch on every `getStats()` call. There is no incr
 Calling `registerSignal()` twice before `evaluateCandle()` replaces the first signal with the second, without error. The manager has no opinion on whether this is correct — that decision belongs to the strategy. Check `pm.hasPendingSignal` before registering if your strategy requires a different policy.
 
 ---
-
 
 <br/>
 <br/>
