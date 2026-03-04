@@ -1,0 +1,41 @@
+{
+    "name": "@himalaya-quant/position-manager",
+    "version": "0.0.1",
+    "description": "A typescript library that's responsible for managing backtesting simulated positions",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc",
+        "build:watch": "tsc --watch",
+        "start": "tsc && node dist/index.js",
+        "test": "rm -rf dist && vitest",
+        "test:ui": "vitest --ui",
+        "test:run": "vitest run",
+        "test:cov": "vitest run --coverage"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/himalaya-quant/hq-position-manager.git"
+    },
+    "keywords": [
+        "himalaya-quant",
+        "himalaya",
+        "hq",
+        "backtest",
+        "position",
+        "simulation",
+        "broker",
+        "trading",
+        "forex"
+    ],
+    "author": "Caius Citiriga",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/himalaya-quant/hq-position-manager/issues"
+    },
+    "homepage": "https://github.com/himalaya-quant/hq-position-manager#readme",
+    "devDependencies": {
+        "@types/node": "^25.3.3",
+        "typescript": "^5.9.3",
+        "vitest": "^4.0.18"
+    }
+}

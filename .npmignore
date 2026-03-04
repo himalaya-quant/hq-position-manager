@@ -1,0 +1,9 @@
+test/**/*
+py_test/**/*
+.vscode/**/*
+coverage/**/*
+src/examples/**/*
+dist/examples/**/*
+jest.config.js
+vitest.config.ts
+tsconfig.json
