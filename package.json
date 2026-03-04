@@ -1,6 +1,6 @@
 {
     "name": "@himalaya-quant/position-manager",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "A typescript library that's responsible for managing backtesting simulated positions",
     "main": "dist/index.js",
     "scripts": {
@@ -31,6 +31,9 @@
     "license": "MIT",
     "bugs": {
         "url": "https://github.com/himalaya-quant/hq-position-manager/issues"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "homepage": "https://github.com/himalaya-quant/hq-position-manager#readme",
     "devDependencies": {
