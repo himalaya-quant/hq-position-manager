@@ -1,3 +1,7 @@
+# 0.0.3
+
+Fixed max drawdown calculation
+
 # 0.0.2
 
 Removed module structure from readme contents

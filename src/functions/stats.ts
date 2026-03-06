@@ -24,10 +24,16 @@ function computeMaxDrawdown(equityCurve: number[]): {
         if (equity > peak) {
             peak = equity;
         }
+
         const drawdown = peak - equity;
+        const drawdownPct = peak > 0 ? drawdown / peak : 0;
+
         if (drawdown > maxDrawdown) {
             maxDrawdown = drawdown;
-            maxDrawdownPct = peak > 0 ? drawdown / peak : 0;
+        }
+
+        if (drawdownPct > maxDrawdownPct) {
+            maxDrawdownPct = drawdownPct;
         }
     }
 
