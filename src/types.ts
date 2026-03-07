@@ -141,7 +141,17 @@ export interface PositionManagerConfig {
      * Prefer risk-based sizing (i.e. always provide an SL) whenever possible.
      */
     readonly fallbackAllocation: number;
-    /** Broker spread as a fraction of entry price (e.g. 0.0006 = 0.06%). */
+    /**
+     * Broker spread as a percentage of entry price.
+     * Pass the number exactly as the broker advertises it — no conversion needed.
+     *
+     *   ICMarkets 0.06%  →  spread: 0.06  ✓
+     *   ICMarkets 0.5%   →  spread: 0.5   ✓
+     *
+     * The manager converts to a fraction internally (divides by 100).
+     * Passing a pre-divided fraction (e.g. 0.0006) will result in a spread
+     * 100× smaller than intended.
+     */
     readonly spread: number;
     /**
      * Distance of the trailing stop from the most favourable price reached,

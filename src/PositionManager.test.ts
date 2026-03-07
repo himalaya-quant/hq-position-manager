@@ -16,7 +16,7 @@ const BASE_CONFIG: PositionManagerConfig = {
     initialCapital: 10_000,
     riskPerTrade: 0.02, // 2 %
     fallbackAllocation: 0.1, // 10 %
-    spread: 0.0002,
+    spread: 0, // no spread in base config — override per test when needed
 };
 
 /** Shorthand for building an OHLC candle. */
@@ -75,18 +75,46 @@ describe('PendingSignal', () => {
 // ---------------------------------------------------------------------------
 
 describe('Spread', () => {
-    it('adds spread to entry on long (buyer pays the ask)', () => {
-        const pm = new PositionManager(BASE_CONFIG);
+    it('accepts spread as a percentage and converts internally', () => {
+        // BASE_CONFIG has spread: 0.0002 (a fraction) — this would be wrong
+        // under the new convention. Use a fresh config with a proper percentage.
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
         pm.open('long', 1.2, 1);
 
-        expect(pm.activePosition!.entryPrice).toBeCloseTo(1.2002);
+        // 0.06% of 1.2000 = 0.000720
+        expect(pm.activePosition!.entryPrice).toBeCloseTo(
+            1.2 + 1.2 * 0.0006,
+            6,
+        );
     });
 
-    it('subtracts spread from entry on short (seller receives the bid)', () => {
-        const pm = new PositionManager(BASE_CONFIG);
+    it('adds spread amount to entry on long (buyer pays the ask)', () => {
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
+        pm.open('long', 1.2, 1);
+
+        const expected = 1.2 + 1.2 * (0.06 / 100);
+        expect(pm.activePosition!.entryPrice).toBeCloseTo(expected, 6);
+    });
+
+    it('subtracts spread amount from entry on short (seller receives the bid)', () => {
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
         pm.open('short', 1.2, 1);
 
-        expect(pm.activePosition!.entryPrice).toBeCloseTo(1.1998);
+        const expected = 1.2 - 1.2 * (0.06 / 100);
+        expect(pm.activePosition!.entryPrice).toBeCloseTo(expected, 6);
+    });
+
+    it('throws when spread is >= 100', () => {
+        expect(
+            () => new PositionManager({ ...BASE_CONFIG, spread: 100 }),
+        ).toThrow();
+    });
+
+    it('spread of 0 applies no adjustment', () => {
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0 });
+        pm.open('long', 1.2, 1);
+
+        expect(pm.activePosition!.entryPrice).toBe(1.2);
     });
 });
 
@@ -96,8 +124,26 @@ describe('Spread', () => {
 
 describe('Position sizing', () => {
     it('computes risk-based size when SL is present', () => {
+        // BASE_CONFIG has spread: 0, so adjustedEntry === raw open price
         const pm = new PositionManager(BASE_CONFIG);
-        const adjustedEntry = 1.2 + 0.0002;
+        const adjustedEntry = 1.2; // no spread applied
+        const expectedSize = (10_000 * 0.02) / (adjustedEntry - 1.195);
+
+        pm.registerSignal({
+            direction: 'long',
+            stopLoss: 1.195,
+            createdAtTimestamp: 1,
+        });
+        pm.evaluateCandle(candle(1.2, 1.22, 1.196, 1.21, 2));
+
+        expect(pm.activePosition!.size).toBeCloseTo(expectedSize, 2);
+    });
+
+    it('computes risk-based size correctly when spread is non-zero', () => {
+        // With spread: 0.06 (0.06%), adjustedEntry = 1.2000 + 1.2000 * 0.0006 = 1.200720
+        const SPREAD_PCT = 0.06;
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: SPREAD_PCT });
+        const adjustedEntry = 1.2 + 1.2 * (SPREAD_PCT / 100);
         const expectedSize = (10_000 * 0.02) / (adjustedEntry - 1.195);
 
         pm.registerSignal({
@@ -111,8 +157,9 @@ describe('Position sizing', () => {
     });
 
     it('computes fallback-allocation size when SL is absent', () => {
+        // BASE_CONFIG has spread: 0, so adjustedEntry === raw open price
         const pm = new PositionManager(BASE_CONFIG);
-        const adjustedEntry = 1.2 + 0.0002;
+        const adjustedEntry = 1.2; // no spread applied
         const expectedSize = (10_000 * 0.1) / adjustedEntry;
 
         pm.registerSignal({ direction: 'long', createdAtTimestamp: 1 });

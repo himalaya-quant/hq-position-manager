@@ -43,6 +43,9 @@ export class PositionManager {
 
     private readonly config: PositionManagerConfig;
 
+    /** Spread as a fraction (config.spread / 100) — computed once at construction. */
+    private readonly _spreadFraction: number;
+
     private _capital: number;
 
     /** Active open position — null when flat. */
@@ -80,14 +83,17 @@ export class PositionManager {
         if (config.fallbackAllocation <= 0 || config.fallbackAllocation >= 1) {
             throw new Error('fallbackAllocation must be in the range (0, 1)');
         }
-        if (config.spread < 0) {
-            throw new Error('spread must be non-negative');
+        if (config.spread < 0 || config.spread >= 100) {
+            throw new Error(
+                'spread must be a percentage in the range [0, 100]',
+            );
         }
         if (config.trailingStop !== undefined && config.trailingStop <= 0) {
             throw new Error('trailingStop must be positive when defined');
         }
 
         this.config = Object.freeze({ ...config });
+        this._spreadFraction = config.spread / 100;
         this._capital = config.initialCapital;
     }
 
@@ -243,9 +249,10 @@ export class PositionManager {
 
         validateCapital(this._capital);
 
-        // Apply spread asymmetrically based on direction
-        const spreadAmount = entryPrice * this.config.spread;
-
+        // Apply spread asymmetrically based on direction.
+        // Spread is stored as a percentage — multiply by entry price to get the
+        // absolute adjustment, then add (long) or subtract (short).
+        const spreadAmount = entryPrice * this._spreadFraction;
         const adjustedEntry =
             direction === 'long'
                 ? entryPrice + spreadAmount

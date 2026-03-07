@@ -20,8 +20,8 @@
  * show API usage, not to be profitable.
  */
 
-import type { OHLC } from '../types';
 import { PositionManager } from '../PositionManager';
+import { OHLC } from '../types';
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ const pm = new PositionManager({
     initialCapital: 10_000, // €
     riskPerTrade: 0.02, // 2% of current capital risked per trade (when SL is set)
     fallbackAllocation: 0.1, // 10% allocated when no SL is provided
-    spread: 0, // no spread to keep example numbers clean
+    spread: 0.06, // 0.06% — ICMarkets standard spread
 });
 
 // ─── Synthetic candle data ─────────────────────────────────────────────────
@@ -201,31 +201,22 @@ console.log(
     '\n── Results ───────────────────────────────────────────────────────',
 );
 console.log(
-    `Trades: ${s.totalTrades}  (${s.winningTrades}W / ${s.losingTrades}L)`,
+    `   Trades          : ${s.totalTrades}  (${s.winningTrades}W / ${s.losingTrades}L)`,
 );
-
-console.log(`Win rate: ${(s.winRate * 100).toFixed(1)}%`);
-
+console.log(`   Win rate        : ${(s.winRate * 100).toFixed(1)}%`);
 console.log(
-    `Profit factor: ${isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'}`,
+    `   Profit factor   : ${isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'}`,
 );
-
-console.log(`Avg win: €${s.avgWin.toFixed(2)}`);
-
-console.log(`Avg loss: €${s.avgLoss.toFixed(2)}`);
-
+console.log(`   Avg win         : €${s.avgWin.toFixed(2)}`);
+console.log(`   Avg loss        : €${s.avgLoss.toFixed(2)}`);
 console.log(
-    `Risk / reward: ${isFinite(s.riskReward) ? s.riskReward.toFixed(2) : '∞'}`,
+    `   Risk / reward   : ${isFinite(s.riskReward) ? s.riskReward.toFixed(2) : '∞'}`,
 );
-
 console.log(
-    `Max drawdown: €${s.maxDrawdown.toFixed(2)} (${(s.maxDrawdownPct * 100).toFixed(2)}%)`,
+    `   Max drawdown    : €${s.maxDrawdown.toFixed(2)} (${(s.maxDrawdownPct * 100).toFixed(2)}%)`,
 );
-
-console.log(`Final capital: €${s.finalCapital.toFixed(2)}`);
-
-console.log(`Total return: ${(s.totalReturn * 100).toFixed(2)}%`);
-
+console.log(`   Final capital   : €${s.finalCapital.toFixed(2)}`);
+console.log(`   Total return    : ${(s.totalReturn * 100).toFixed(2)}%`);
 console.log(
-    `Equity curve: [${s.equityCurve.map((v) => '€' + v.toFixed(0)).join(' → ')}]`,
+    `   Equity curve    : [${s.equityCurve.map((v) => '€' + v.toFixed(0)).join(' → ')}]`,
 );

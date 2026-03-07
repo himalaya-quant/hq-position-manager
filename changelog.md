@@ -1,3 +1,8 @@
+# 0.0.5
+
+Broker spread is now expected as a percentage of entry price.
+Pass the number exactly as the broker advertises it — no conversion needed.
+
 # 0.0.4
 
 Fixed spread calculation. Now is percentage based instead of fixed value
