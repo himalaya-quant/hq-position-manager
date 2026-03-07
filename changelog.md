@@ -1,3 +1,7 @@
+# 0.0.4
+
+Fixed spread calculation. Now is percentage based instead of fixed value
+
 # 0.0.3
 
 Fixed max drawdown calculation

@@ -141,7 +141,7 @@ export interface PositionManagerConfig {
      * Prefer risk-based sizing (i.e. always provide an SL) whenever possible.
      */
     readonly fallbackAllocation: number;
-    /** Fixed spread in price units (e.g. 0.0002 for 2 pip on EUR/USD). */
+    /** Broker spread as a fraction of entry price (e.g. 0.0006 = 0.06%). */
     readonly spread: number;
     /**
      * Distance of the trailing stop from the most favourable price reached,

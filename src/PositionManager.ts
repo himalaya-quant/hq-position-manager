@@ -244,10 +244,12 @@ export class PositionManager {
         validateCapital(this._capital);
 
         // Apply spread asymmetrically based on direction
+        const spreadAmount = entryPrice * this.config.spread;
+
         const adjustedEntry =
             direction === 'long'
-                ? entryPrice + this.config.spread
-                : entryPrice - this.config.spread;
+                ? entryPrice + spreadAmount
+                : entryPrice - spreadAmount;
 
         // Validate SL/TP against the adjusted entry price before sizing
         if (sl !== undefined) {
