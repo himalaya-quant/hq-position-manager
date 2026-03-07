@@ -1,3 +1,22 @@
+# 0.0.6
+
+Introduced commission model and spread calculation from pips (for supported markets).
+Traditional markets will define the spread using the Spread.fromPips utility and pass:
+
+- Spread in pips, as shown in the broker's fee table
+- The pip size (for forex can use PipSize convenience mapping)
+
+The commission model supports 3 types:
+
+- perLot: Fixed commission per lot, per side. Common on Raw Spread accounts
+  (e.g. ICMarkets cTrader: $3 per standard lot per side).
+
+- percentageOfNotional: Percentage of the trade notional value, per side.
+  Common on crypto spot and futures exchanges (Binance, Bybit, etc.).
+
+- none: No commission. Use when the broker embeds all costs in the spread.
+  (e.g. ICMarkets Standard Account, or crypto where spread covers cost).
+
 # 0.0.5
 
 Broker spread is now expected as a percentage of entry price.

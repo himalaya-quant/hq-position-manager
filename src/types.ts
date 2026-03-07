@@ -5,6 +5,10 @@
 // from primitive → composite → config → output.
 // =============================================================================
 
+import type { CommissionModel } from './functions/commission';
+
+export type { CommissionModel };
+
 // ---------------------------------------------------------------------------
 // Primitive types
 // ---------------------------------------------------------------------------
@@ -63,10 +67,12 @@ export interface PartialExit {
     readonly exitTimestamp: number;
     /** Number of units closed in this operation. */
     readonly closedSize: number;
-    /** P&L in currency (€) for the units closed. */
+    /** P&L in currency net of commission for the units closed. */
     readonly pnlAbsolute: number;
-    /** P&L as a percentage of capitalAtOpen. */
+    /** P&L as a percentage of capitalAtOpen, net of commission. */
     readonly pnlPercentage: number;
+    /** Commission paid on this partial close (one side). */
+    readonly commissionPaid: number;
 }
 
 /** Audit-trail entry for every SL or TP modification. */
@@ -98,6 +104,8 @@ export interface OpenPosition {
     partialExits: ReadonlyArray<PartialExit>;
     /** Full audit trail of SL/TP modifications. Replaced (not mutated) on each change. */
     slHistory: ReadonlyArray<SLTPChange>;
+    /** Running total of commission paid so far: open leg + all partial closes. */
+    commissionPaid: number;
 }
 
 /** Final record of a completed trade (extends OpenPosition with close data). */
@@ -106,12 +114,14 @@ export interface ClosedPosition extends Omit<OpenPosition, 'size'> {
     readonly exitPrice: number;
     readonly exitTimestamp: number;
     readonly exitReason: ExitReason;
-    /** Total P&L in currency, aggregating all partial exits and the final close. */
+    /** Total P&L in currency, net of all commissions (open + all closes). */
     readonly pnlAbsolute: number;
-    /** Total P&L as a percentage of capitalAtOpen. */
+    /** Total P&L as a percentage of capitalAtOpen, net of all commissions. */
     readonly pnlPercentage: number;
     /** Remaining size that was closed in the final operation. */
     readonly finalClosedSize: number;
+    /** Total commission paid for this trade: open leg + all close legs. */
+    readonly commissionPaid: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,17 +152,36 @@ export interface PositionManagerConfig {
      */
     readonly fallbackAllocation: number;
     /**
-     * Broker spread as a percentage of entry price.
-     * Pass the number exactly as the broker advertises it — no conversion needed.
+     * Spread in price units (the same unit as entryPrice).
+     * Use Spread.fromPips() to convert from the pip value shown in broker tables.
      *
-     *   ICMarkets 0.06%  →  spread: 0.06  ✓
-     *   ICMarkets 0.5%   →  spread: 0.5   ✓
+     * @example
+     * // ICMarkets Raw — EURUSD 0.06 pip
+     * spread: Spread.fromPips(0.06, PipSize.FOREX_MAJOR)  // → 0.000006
      *
-     * The manager converts to a fraction internally (divides by 100).
-     * Passing a pre-divided fraction (e.g. 0.0006) will result in a spread
-     * 100× smaller than intended.
+     * // ICMarkets Standard — EURUSD 0.80 pip
+     * spread: Spread.fromPips(0.80, PipSize.FOREX_MAJOR)  // → 0.00008
+     *
+     * // ICMarkets — BTCUSD 6.46 pip
+     * spread: Spread.fromPips(6.46, PipSize.BTC)          // → 6.46
      */
     readonly spread: number;
+    /**
+     * Commission model applied on every trade leg (open and close).
+     * Use Commission factory functions to build the model for your broker.
+     *
+     * @example
+     * // ICMarkets Raw Forex — $3 per standard lot per side
+     * commissionModel: Commission.perLot(3.0, 100_000)
+     *
+     * // Binance / Bybit — 0.1% taker fee
+     * commissionModel: Commission.percentageOfNotional(0.001)
+     *
+     * // Standard account or crypto with spread-only cost
+     * // omit this field — defaults to Commission.none()
+     */
+    readonly commissionModel?: CommissionModel;
+
     /**
      * Distance of the trailing stop from the most favourable price reached,
      * expressed in **price units** — the same unit as `entryPrice`, `stopLoss`,
@@ -196,6 +225,8 @@ export interface BacktestStats {
     readonly finalCapital: number;
     /** Total return as a percentage of initialCapital. */
     readonly totalReturn: number;
+    /** Total commission paid across all trades, in account currency. */
+    readonly totalCommissionPaid: number;
     /** Capital after each closed trade (first element = initialCapital). */
     readonly equityCurve: number[];
 }

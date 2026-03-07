@@ -30,6 +30,8 @@ import type {
 import { aggregatePnl, computePnl } from './functions/pnl';
 import { resolveSize } from './functions/sizing';
 import { computeStats } from './functions/stats';
+import { Commission } from './functions/commission';
+import type { CommissionModel } from './types';
 import {
     validateCapital,
     validateStopLoss,
@@ -43,8 +45,11 @@ export class PositionManager {
 
     private readonly config: PositionManagerConfig;
 
-    /** Spread as a fraction (config.spread / 100) — computed once at construction. */
-    private readonly _spreadFraction: number;
+    /**
+     * Resolved commission model — defaults to Commission.none() when
+     * commissionModel is omitted from config.
+     */
+    private readonly _commissionModel: CommissionModel;
 
     private _capital: number;
 
@@ -83,17 +88,15 @@ export class PositionManager {
         if (config.fallbackAllocation <= 0 || config.fallbackAllocation >= 1) {
             throw new Error('fallbackAllocation must be in the range (0, 1)');
         }
-        if (config.spread < 0 || config.spread >= 100) {
-            throw new Error(
-                'spread must be a percentage in the range [0, 100]',
-            );
+        if (config.spread < 0) {
+            throw new Error('spread must be non-negative');
         }
         if (config.trailingStop !== undefined && config.trailingStop <= 0) {
             throw new Error('trailingStop must be positive when defined');
         }
 
         this.config = Object.freeze({ ...config });
-        this._spreadFraction = config.spread / 100;
+        this._commissionModel = config.commissionModel ?? Commission.none();
         this._capital = config.initialCapital;
     }
 
@@ -250,13 +253,12 @@ export class PositionManager {
         validateCapital(this._capital);
 
         // Apply spread asymmetrically based on direction.
-        // Spread is stored as a percentage — multiply by entry price to get the
-        // absolute adjustment, then add (long) or subtract (short).
-        const spreadAmount = entryPrice * this._spreadFraction;
+        // Spread is in price units — add for long (buyer pays ask),
+        // subtract for short (seller receives bid).
         const adjustedEntry =
             direction === 'long'
-                ? entryPrice + spreadAmount
-                : entryPrice - spreadAmount;
+                ? entryPrice + this.config.spread
+                : entryPrice - this.config.spread;
 
         // Validate SL/TP against the adjusted entry price before sizing
         if (sl !== undefined) {
@@ -267,6 +269,11 @@ export class PositionManager {
         }
 
         const size = resolveSize(adjustedEntry, sl, this._capital, this.config);
+
+        // Deduct open-leg commission before snapshotting capitalAtOpen,
+        // so that capitalAtOpen already reflects the net available capital.
+        const openCommission = this._commissionModel(adjustedEntry, size);
+        this._capital -= openCommission;
 
         this._position = {
             direction,
@@ -279,6 +286,7 @@ export class PositionManager {
             takeProfit: tp,
             partialExits: [],
             slHistory: [],
+            commissionPaid: openCommission,
         };
 
         // Initialise trailing stop water marks
@@ -321,7 +329,8 @@ export class PositionManager {
         }
 
         const pos = this._position;
-        const { pnlAbsolute, pnlPercentage } = computePnl(
+        const exitCommission = this._commissionModel(exitPrice, sizeToClose);
+        const { pnlAbsolute: grossPnl, pnlPercentage: grossPct } = computePnl(
             pos.direction,
             pos.entryPrice,
             exitPrice,
@@ -329,19 +338,25 @@ export class PositionManager {
             pos.capitalAtOpen,
         );
 
+        // P&L is net of commission — what the trader actually receives
+        const pnlAbsolute = grossPnl - exitCommission;
+        const pnlPercentage = pnlAbsolute / pos.capitalAtOpen;
+
         const partialExit: PartialExit = Object.freeze({
             exitPrice,
             exitTimestamp: timestamp,
             closedSize: sizeToClose,
             pnlAbsolute,
             pnlPercentage,
+            commissionPaid: exitCommission,
         });
 
         // Mutate position state
         pos.size -= sizeToClose;
         pos.partialExits = [...pos.partialExits, partialExit];
+        pos.commissionPaid += exitCommission;
 
-        // Update capital immediately
+        // Update capital with net P&L (gross movement minus commission)
         this._capital += pnlAbsolute;
 
         return partialExit;
@@ -370,8 +385,11 @@ export class PositionManager {
 
         const pos = this._position;
 
-        // P&L for the residual size (the final lot)
-        const { pnlAbsolute: finalLegPnl } = computePnl(
+        // Commission on the close leg
+        const exitCommission = this._commissionModel(exitPrice, pos.size);
+
+        // Gross P&L for the residual size (the final lot)
+        const { pnlAbsolute: grossFinalLegPnl } = computePnl(
             pos.direction,
             pos.entryPrice,
             exitPrice,
@@ -379,12 +397,18 @@ export class PositionManager {
             pos.capitalAtOpen,
         );
 
-        // Aggregate with all preceding partial exits
+        // Net P&L for the final leg after deducting close commission
+        const netFinalLegPnl = grossFinalLegPnl - exitCommission;
+
+        // Aggregate net P&L across all partial exits and the final leg
         const { pnlAbsolute, pnlPercentage } = aggregatePnl(
             pos.partialExits,
-            finalLegPnl,
+            netFinalLegPnl,
             pos.capitalAtOpen,
         );
+
+        // Total commission for the entire trade lifecycle
+        const totalCommission = pos.commissionPaid + exitCommission;
 
         const closedPosition: ClosedPosition = Object.freeze({
             direction: pos.direction,
@@ -403,10 +427,11 @@ export class PositionManager {
             exitReason: reason,
             pnlAbsolute,
             pnlPercentage,
+            commissionPaid: totalCommission,
         });
 
-        // Update capital with the final leg's P&L
-        this._capital += finalLegPnl;
+        // Update capital with net final leg P&L
+        this._capital += netFinalLegPnl;
 
         // Record and reset
         this._trades = [...this._trades, closedPosition];

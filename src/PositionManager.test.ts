@@ -6,6 +6,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PositionManager } from './PositionManager';
+import { Spread, PipSize } from './functions/spread';
+import { Commission } from './functions/commission';
 import type { OHLC, PositionManagerConfig } from './types';
 
 // ---------------------------------------------------------------------------
@@ -75,39 +77,52 @@ describe('PendingSignal', () => {
 // ---------------------------------------------------------------------------
 
 describe('Spread', () => {
-    it('accepts spread as a percentage and converts internally', () => {
-        // BASE_CONFIG has spread: 0.0002 (a fraction) — this would be wrong
-        // under the new convention. Use a fresh config with a proper percentage.
-        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
+    it('adds spread to entry on long (buyer pays the ask)', () => {
+        const spreadInPrice = Spread.fromPips(0.06, PipSize.FOREX_MAJOR);
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: spreadInPrice,
+        });
         pm.open('long', 1.2, 1);
 
-        // 0.06% of 1.2000 = 0.000720
         expect(pm.activePosition!.entryPrice).toBeCloseTo(
-            1.2 + 1.2 * 0.0006,
-            6,
+            1.2 + spreadInPrice,
+            8,
         );
     });
 
-    it('adds spread amount to entry on long (buyer pays the ask)', () => {
-        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
-        pm.open('long', 1.2, 1);
-
-        const expected = 1.2 + 1.2 * (0.06 / 100);
-        expect(pm.activePosition!.entryPrice).toBeCloseTo(expected, 6);
-    });
-
-    it('subtracts spread amount from entry on short (seller receives the bid)', () => {
-        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0.06 }); // 0.06%
+    it('subtracts spread from entry on short (seller receives the bid)', () => {
+        const spreadInPrice = Spread.fromPips(0.06, PipSize.FOREX_MAJOR);
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: spreadInPrice,
+        });
         pm.open('short', 1.2, 1);
 
-        const expected = 1.2 - 1.2 * (0.06 / 100);
-        expect(pm.activePosition!.entryPrice).toBeCloseTo(expected, 6);
+        expect(pm.activePosition!.entryPrice).toBeCloseTo(
+            1.2 - spreadInPrice,
+            8,
+        );
     });
 
-    it('throws when spread is >= 100', () => {
-        expect(
-            () => new PositionManager({ ...BASE_CONFIG, spread: 100 }),
-        ).toThrow();
+    it('Spread.fromPips converts forex pip values to price units correctly', () => {
+        expect(Spread.fromPips(0.06, PipSize.FOREX_MAJOR)).toBeCloseTo(
+            0.000006,
+            8,
+        ); // EURUSD Raw
+        expect(Spread.fromPips(0.8, PipSize.FOREX_MAJOR)).toBeCloseTo(
+            0.00008,
+            8,
+        ); // EURUSD Standard
+        expect(Spread.fromPips(0.6, PipSize.FOREX_JPY)).toBeCloseTo(0.006, 8); // USDJPY
+    });
+
+    it('crypto spread is passed directly in price units without fromPips', () => {
+        // Crypto pip conventions are broker-specific — pass spread as-is in price units
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 6.46 }); // ICMarkets BTCUSD
+        pm.open('long', 50_000, 1);
+
+        expect(pm.activePosition!.entryPrice).toBeCloseTo(50_000 + 6.46, 4);
     });
 
     it('spread of 0 applies no adjustment', () => {
@@ -140,10 +155,13 @@ describe('Position sizing', () => {
     });
 
     it('computes risk-based size correctly when spread is non-zero', () => {
-        // With spread: 0.06 (0.06%), adjustedEntry = 1.2000 + 1.2000 * 0.0006 = 1.200720
-        const SPREAD_PCT = 0.06;
-        const pm = new PositionManager({ ...BASE_CONFIG, spread: SPREAD_PCT });
-        const adjustedEntry = 1.2 + 1.2 * (SPREAD_PCT / 100);
+        // Spread.fromPips(0.06, PipSize.FOREX_MAJOR) = 0.000006 in price units
+        const spreadInPrice = Spread.fromPips(0.06, PipSize.FOREX_MAJOR);
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: spreadInPrice,
+        });
+        const adjustedEntry = 1.2 + spreadInPrice; // added directly as price units
         const expectedSize = (10_000 * 0.02) / (adjustedEntry - 1.195);
 
         pm.registerSignal({
@@ -618,7 +636,103 @@ describe('forceCloseAtEnd()', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 12. Immutability of public snapshots
+// 12. Commission
+// ---------------------------------------------------------------------------
+
+describe('Commission', () => {
+    it('Commission.perLot deducts open commission from capital', () => {
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: 0,
+            commissionModel: Commission.perLot(3.0, 100_000),
+        });
+        const capitalBefore = pm.capital;
+        pm.open('long', 1.0, 1, 0.99);
+
+        const size = pm.activePosition!.size;
+        const expectedCommission = (size / 100_000) * 3.0;
+
+        // Capital should be reduced by open commission before capitalAtOpen snapshot
+        expect(pm.capital).toBeCloseTo(capitalBefore - expectedCommission, 4);
+        expect(pm.activePosition!.commissionPaid).toBeCloseTo(
+            expectedCommission,
+            4,
+        );
+    });
+
+    it('Commission.perLot deducts close commission and produces net P&L', () => {
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: 0,
+            commissionModel: Commission.perLot(3.0, 100_000),
+        });
+        pm.open('long', 1.0, 1, 0.99);
+        const size = pm.activePosition!.size;
+        const openCommission = (size / 100_000) * 3.0;
+
+        const closed = pm.close(1.01, 2, 'SIGNAL');
+        const closeCommission = (size / 100_000) * 3.0;
+        const grossPnl = (1.01 - 1.0) * size;
+        const expectedNetPnl = grossPnl - closeCommission;
+
+        expect(closed.pnlAbsolute).toBeCloseTo(expectedNetPnl, 4);
+        expect(closed.commissionPaid).toBeCloseTo(
+            openCommission + closeCommission,
+            4,
+        );
+    });
+
+    it('Commission.percentageOfNotional scales with price and size', () => {
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: 0,
+            commissionModel: Commission.percentageOfNotional(0.001), // 0.1%
+        });
+        pm.open('long', 50_000, 1); // BTC-like price
+        const size = pm.activePosition!.size;
+
+        const expectedOpenCommission = 50_000 * size * 0.001;
+        expect(pm.activePosition!.commissionPaid).toBeCloseTo(
+            expectedOpenCommission,
+            2,
+        );
+    });
+
+    it('no commission model defaults to zero commission', () => {
+        const pm = new PositionManager({ ...BASE_CONFIG, spread: 0 });
+        const capitalBefore = pm.capital;
+        pm.open('long', 1.0, 1, 0.99);
+
+        expect(pm.activePosition!.commissionPaid).toBe(0);
+        // Capital unchanged by commission (only spread, which is 0 here)
+        expect(pm.capital).toBeCloseTo(capitalBefore, 8);
+    });
+
+    it('getStats reflects totalCommissionPaid across all trades', () => {
+        const pm = new PositionManager({
+            ...BASE_CONFIG,
+            spread: 0,
+            commissionModel: Commission.perLot(3.0, 100_000),
+        });
+
+        pm.open('long', 1.0, 1, 0.99);
+        const size1 = pm.activePosition!.size;
+        pm.close(1.01, 2, 'SIGNAL');
+
+        pm.open('long', 1.01, 3, 1.0);
+        const size2 = pm.activePosition!.size;
+        pm.close(1.02, 4, 'SIGNAL');
+
+        const expectedTotal =
+            (size1 / 100_000) * 3.0 * 2 + // trade 1: open + close
+            (size2 / 100_000) * 3.0 * 2; // trade 2: open + close
+
+        expect(pm.getStats().totalCommissionPaid).toBeCloseTo(expectedTotal, 4);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 13. Immutability of public snapshots
 // ---------------------------------------------------------------------------
 
 describe('Immutability', () => {

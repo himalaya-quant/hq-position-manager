@@ -5,16 +5,19 @@
 // =============================================================================
 
 export { PositionManager } from './PositionManager';
+export { Spread, PipSize } from './functions/spread';
+export { Commission } from './functions/commission';
 
 export type {
-    OHLC,
-    Direction,
-    SLTPChange,
-    ExitReason,
-    PartialExit,
-    OpenPosition,
-    PendingSignal,
     BacktestStats,
     ClosedPosition,
+    CommissionModel,
+    Direction,
+    ExitReason,
+    OHLC,
+    OpenPosition,
+    PartialExit,
+    PendingSignal,
     PositionManagerConfig,
+    SLTPChange,
 } from './types';

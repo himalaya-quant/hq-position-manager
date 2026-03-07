@@ -20,8 +20,9 @@
  * show API usage, not to be profitable.
  */
 
-import { PositionManager } from '../PositionManager';
-import { OHLC } from '../types';
+import { PositionManager, Spread, PipSize, Commission } from '../index';
+// PipSize is forex-only. For crypto, pass spread directly in price units.
+import type { OHLC } from '../types';
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 
@@ -29,7 +30,8 @@ const pm = new PositionManager({
     initialCapital: 10_000, // €
     riskPerTrade: 0.02, // 2% of current capital risked per trade (when SL is set)
     fallbackAllocation: 0.1, // 10% allocated when no SL is provided
-    spread: 0.06, // 0.06% — ICMarkets standard spread
+    spread: Spread.fromPips(0.06, PipSize.FOREX_MAJOR), // ICMarkets Raw EURUSD
+    commissionModel: Commission.perLot(3.0, 100_000), // ICMarkets Raw: €3/lot/side
 });
 
 // ─── Synthetic candle data ─────────────────────────────────────────────────

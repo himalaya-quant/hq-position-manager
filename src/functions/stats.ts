@@ -24,16 +24,10 @@ function computeMaxDrawdown(equityCurve: number[]): {
         if (equity > peak) {
             peak = equity;
         }
-
         const drawdown = peak - equity;
-        const drawdownPct = peak > 0 ? drawdown / peak : 0;
-
         if (drawdown > maxDrawdown) {
             maxDrawdown = drawdown;
-        }
-
-        if (drawdownPct > maxDrawdownPct) {
-            maxDrawdownPct = drawdownPct;
+            maxDrawdownPct = peak > 0 ? drawdown / peak : 0;
         }
     }
 
@@ -96,6 +90,11 @@ export function computeStats(
             ? (finalCapital - initialCapital) / initialCapital
             : 0;
 
+    const totalCommissionPaid = trades.reduce(
+        (acc, t) => acc + t.commissionPaid,
+        0,
+    );
+
     return Object.freeze({
         totalTrades,
         winningTrades,
@@ -109,6 +108,7 @@ export function computeStats(
         maxDrawdownPct,
         finalCapital,
         totalReturn,
+        totalCommissionPaid,
         equityCurve,
     });
 }
