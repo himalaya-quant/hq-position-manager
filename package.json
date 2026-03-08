@@ -1,6 +1,6 @@
 {
     "name": "@himalaya-quant/position-manager",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "description": "A typescript library that's responsible for managing backtesting simulated positions",
     "main": "dist/index.js",
     "scripts": {

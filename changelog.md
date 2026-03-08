@@ -1,3 +1,8 @@
+# 0.0.7
+
+Introduced `syncCapital` feature:
+Allows to forcefully sync the capital from outside.
+
 # 0.0.6
 
 Introduced commission model and spread calculation from pips (for supported markets).

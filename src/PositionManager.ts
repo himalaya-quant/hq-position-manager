@@ -138,6 +138,27 @@ export class PositionManager {
     }
 
     // ---------------------------------------------------------------------------
+    // Public setters
+    // ---------------------------------------------------------------------------
+    /**
+     * Allows to forcefully sync the capital from outside. This is useful when
+     * you want to still use the position manager for sizing, and tracking, but
+     * you have a different capital source of truth. Eg. your broker in paper,
+     * or an external RiskManager that handles multiple positions at once, where
+     * each position has its own PositionManager, but the capital is shared
+     * across all positions
+     *
+     * @param capital
+     */
+    syncCapital(capital: number): void {
+        if (capital <= 0) {
+            throw new Error(`received non-positive capital: ${capital}`);
+        }
+
+        this._capital = capital;
+    }
+
+    // ---------------------------------------------------------------------------
     // Signal registration
     // ---------------------------------------------------------------------------
 
